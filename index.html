@@ -1,1 +1,192 @@
+<!DOCTYPE html>
+<!--
+  scripts/registration-page.html
+
+  GitHub Pages registration form for the #datuur photo booth.
+  Deploy this file as index.html in the koeke1977/registreer repository.
+
+  HOW IT WORKS
+  ────────────
+  1. Booth admin copies the online link (shown in the pre-reg modal).
+     Format: https://registreer.datuur.be/?event=lentefeest-janne&name=Lentefeest+2026
+  2. Guests open the URL on any device, from anywhere.
+  3. On submit the form POSTs to the Cloudflare Worker relay (RELAY_URL below).
+  4. The booth polls the Worker every minute and upserts into SQLite automatically.
+
+  CONFIGURATION
+  ─────────────
+  Update RELAY_URL below to your Cloudflare Worker URL before deploying.
+-->
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>#datuur – Registreer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #111;
+      color: #fff;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .card {
+      background: #1c1c1c;
+      border: 1px solid #2e2e2e;
+      border-radius: 20px;
+      padding: 36px 28px 32px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+    }
+
+    .brand      { font-size: 2rem; font-weight: 900; letter-spacing: -1px; color: #f0b429; }
+    .event-name { font-size: 1.05rem; color: #ccc; margin: 4px 0 28px; min-height: 1.4em; }
+
+    label { display: block; font-size: 0.82rem; color: #888; margin-bottom: 5px; }
+    .req  { color: #f0b429; }
+    .opt  { color: #555; font-size: 0.78rem; }
+
+    input {
+      width: 100%;
+      padding: 13px 15px;
+      background: #262626;
+      border: 1px solid #383838;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1rem;
+      margin-bottom: 18px;
+      transition: border-color .15s;
+    }
+    input:focus        { outline: none; border-color: #f0b429; }
+    input::placeholder { color: #555; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 15px;
+      background: #f0b429;
+      color: #111;
+      font-weight: 800;
+      font-size: 1.05rem;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: opacity .15s;
+    }
+    .submit-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    #msg {
+      display: none;
+      margin-top: 20px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 1rem;
+      line-height: 1.4;
+    }
+    .msg-ok  { background: #0d2b0d; color: #6dd56d; border: 1px solid #1a5a1a; }
+    .msg-err { background: #2b0d0d; color: #d56d6d; border: 1px solid #5a1a1a; }
+
+    .footer { color: #444; font-size: 0.72rem; margin-top: 22px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">#datuur</div>
+    <div class="event-name" id="eventName">Photobooth</div>
+
+    <form id="registrationForm">
+      <label>Voornaam <span class="req">*</span></label>
+      <input name="name" type="text" required autocomplete="given-name" placeholder="Jan">
+
+      <label>Achternaam <span class="req">*</span></label>
+      <input name="surname" type="text" required autocomplete="family-name" placeholder="Janssen">
+
+      <label>E-mail <span class="req">*</span></label>
+      <input name="email" type="email" required autocomplete="email" placeholder="jan@example.com">
+
+      <label>GSM <span class="opt">(optioneel)</span></label>
+      <input name="cell" type="tel" autocomplete="tel" placeholder="+32 470 ...">
+
+      <button class="submit-btn" type="submit">Registreer 📸</button>
+    </form>
+
+    <div id="msg"></div>
+  </div>
+
+  <div class="footer">photobooth@datuur.be</div>
+
+  <script>
+    // ── Configuration ───────────────────────────────────────────────────────
+    // Update this URL to your deployed Cloudflare Worker before publishing.
+    const RELAY_URL = 'https://booth-relay.datuur.be';
+
+    // ── Read event params from URL ──────────────────────────────────────────
+    const params    = new URLSearchParams(window.location.search);
+    const eventId   = params.get('event') || '';
+    const eventName = params.get('name')  || 'Photobooth';
+
+    if (!eventId) {
+      document.querySelector('.card').innerHTML =
+        '<p style="color:#d56d6d;text-align:center;padding:20px;">Geen event geselecteerd.<br>Gebruik de link van de organisator.</p>';
+    } else {
+      document.getElementById('eventName').textContent = decodeURIComponent(eventName);
+      document.title = `#datuur – ${decodeURIComponent(eventName)}`;
+    }
+
+    // ── Form submission ─────────────────────────────────────────────────────
+    document.getElementById('registrationForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const btn = this.querySelector('.submit-btn');
+      btn.disabled    = true;
+      btn.textContent = '...';
+
+      const data = Object.fromEntries(new FormData(this));
+
+      try {
+        const response = await fetch(`${RELAY_URL}/api/register`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ ...data, eventId }),
+        });
+
+        const result = await response.json();
+        const msg    = document.getElementById('msg');
+
+        if (result.ok) {
+          msg.className   = 'msg-ok';
+          msg.textContent = '✅ Registratie gelukt! We zien je straks 🎉';
+          this.reset();
+          btn.textContent = 'Nog iemand registreren';
+          btn.disabled    = false;
+        } else {
+          msg.className   = 'msg-err';
+          msg.textContent = '❌ ' + (result.error || 'Onbekende fout');
+          btn.textContent = 'Registreer 📸';
+          btn.disabled    = false;
+        }
+
+        msg.style.display = 'block';
+      } catch {
+        const msg       = document.getElementById('msg');
+        msg.className   = 'msg-err';
+        msg.textContent = '❌ Verbindingsfout – probeer opnieuw';
+        msg.style.display = 'block';
+        btn.textContent = 'Registreer 📸';
+        btn.disabled    = false;
+      }
+    });
+  </script>
+</body>
+</html>
 
