@@ -153,6 +153,14 @@
     </form>
 
     <div id="msg"></div>
+
+    <!-- ── "Nog iemand toevoegen?" shown after successful registration ── -->
+    <div id="askMore" style="display:none; text-align:center; padding:6px 0 2px;">
+      <p style="color:#6dd56d;font-weight:700;font-size:1.05rem;margin-bottom:12px;">✅ Registratie gelukt! 🎉</p>
+      <p style="color:#ccc;margin-bottom:18px;font-size:0.95rem;">Nog iemand toevoegen?</p>
+      <button class="submit-btn" id="btnYesMore" style="margin-bottom:10px;">✅ Ja, nog iemand registreren</button>
+      <button class="submit-btn" id="btnNoMore" style="background:#333;color:#aaa;font-weight:600;font-size:0.95rem;">❌ Nee, bedankt</button>
+    </div>
   </div>
 
   <div class="footer">photobooth@datuur.be</div>
@@ -248,18 +256,17 @@
         const result = await postRegister({ ...data, eventId, eventName: decodedName });
 
         if (result.ok) {
-          msg.className   = 'msg-ok';
-          msg.textContent = '✅ Registratie gelukt! We zien je straks 🎉';
           this.reset();
-          btn.textContent = 'Nog iemand registreren';
-          btn.disabled    = false;
+          this.style.display                             = 'none';
+          msg.style.display                              = 'none';
+          document.getElementById('askMore').style.display = '';
         } else {
-          msg.className   = 'msg-err';
-          msg.textContent = '❌ ' + (result.error || 'Onbekende fout');
-          btn.textContent = 'Registreer 📸';
-          btn.disabled    = false;
+          msg.className     = 'msg-err';
+          msg.textContent   = '❌ ' + (result.error || 'Onbekende fout');
+          msg.style.display = 'block';
+          btn.textContent   = 'Registreer 📸';
+          btn.disabled      = false;
         }
-        msg.style.display = 'block';
 
       } catch (err) {
         msg.className = 'msg-err';
@@ -274,6 +281,26 @@
         btn.textContent   = 'Registreer 📸';
         btn.disabled      = false;
       }
+    });
+
+    // ── "Nog iemand toevoegen?" handlers ────────────────────────────────
+    document.getElementById('btnYesMore')?.addEventListener('click', () => {
+      // Back to the GDPR card — clean slate
+      document.getElementById('askMore').style.display           = 'none';
+      document.getElementById('registrationForm').style.display  = '';
+      document.getElementById('formCard').style.display           = 'none';
+      document.getElementById('gdprCard').style.display           = '';
+    });
+
+    document.getElementById('btnNoMore')?.addEventListener('click', () => {
+      document.getElementById('formCard').innerHTML = `
+        <div class="brand">#datuur</div>
+        <p style="color:#6dd56d;text-align:center;padding:28px 0 8px;font-size:1.1rem;font-weight:700;line-height:1.8;">
+          ✅ Bedankt voor je registratie!<br>
+          <span style="font-weight:400;font-size:0.95rem;color:#ccc;">
+            Tot binnenkort bij de photobooth 📸
+          </span>
+        </p>`;
     });
   </script>
 </body>
