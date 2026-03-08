@@ -157,7 +157,7 @@
         const response = await fetch(`${RELAY_URL}/api/register`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ...data, eventId }),
+          body:    JSON.stringify({ ...data, eventId, eventName }),
         });
 
         const result = await response.json();
@@ -189,4 +189,3 @@
   </script>
 </body>
 </html>
-
