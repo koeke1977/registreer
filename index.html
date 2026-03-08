@@ -165,7 +165,13 @@
           body:    JSON.stringify({ ...data, eventId, eventName }),
         });
 
-        const result = await response.json();
+        let result;
+        try {
+          result = await response.json();
+        } catch {
+          // Worker returned non-JSON (e.g. Cloudflare error page)
+          throw new Error(`HTTP ${response.status} – onverwacht antwoord`);
+        }
         const msg    = document.getElementById('msg');
 
         if (result.ok) {
@@ -182,10 +188,10 @@
         }
 
         msg.style.display = 'block';
-      } catch {
+      } catch (err) {
         const msg       = document.getElementById('msg');
         msg.className   = 'msg-err';
-        msg.textContent = '❌ Verbindingsfout – probeer opnieuw';
+        msg.textContent = '❌ ' + (err?.message || 'Verbindingsfout') + ' – probeer opnieuw';
         msg.style.display = 'block';
         btn.textContent = 'Registreer 📸';
         btn.disabled    = false;
