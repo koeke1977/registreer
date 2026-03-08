@@ -100,7 +100,39 @@
   </style>
 </head>
 <body>
-  <div class="card">
+  <!-- ── GDPR consent step (shown first, hides form) ─────────────────── -->
+  <div class="card" id="gdprCard">
+    <div class="brand">#datuur</div>
+    <div class="event-name" id="gdprEventName">Photobooth</div>
+
+    <p style="color:#ccc;font-size:0.9rem;line-height:1.6;margin-bottom:18px;">
+      Voordat je je kunt registreren, vragen we je akkoord te gaan met onze
+      <strong style="color:#fff;">privacyverklaring</strong>.
+    </p>
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:14px 16px;font-size:0.82rem;color:#aaa;line-height:1.6;margin-bottom:20px;max-height:180px;overflow-y:auto;">
+      <strong style="color:#eee;">Wat we bijhouden</strong><br>
+      We slaan je voornaam, achternaam, e-mailadres en optioneel gsm-nummer op.
+      Deze gegevens worden uitsluitend gebruikt om jou tijdens het evenement te herkennen
+      en om je persoonlijke fotomomentenlink toe te sturen.<br><br>
+      <strong style="color:#eee;">Hoe lang</strong><br>
+      Je gegevens worden bewaard tot maximaal 30 dagen na het evenement en daarna verwijderd.<br><br>
+      <strong style="color:#eee;">Jouw rechten</strong><br>
+      Je hebt het recht om je gegevens in te zien, te corrigeren of te laten verwijderen.
+      Stuur een mail naar
+      <a href="mailto:photobooth@datuur.be" style="color:#f0b429;">photobooth@datuur.be</a>.<br><br>
+      <strong style="color:#eee;">Verantwoordelijke</strong><br>
+      #datuur – photobooth@datuur.be
+    </div>
+
+    <button class="submit-btn" id="gdprAccept" style="margin-bottom:10px;">✅ Ik ga akkoord en wil me registreren</button>
+    <button class="submit-btn" id="gdprDecline"
+      style="background:#333;color:#aaa;font-weight:600;font-size:0.95rem;">
+      ❌ Nee, ik registreer me niet
+    </button>
+  </div>
+
+  <!-- ── Registration form (hidden until GDPR accepted) ──────────────── -->
+  <div class="card" id="formCard" style="display:none;">
     <div class="brand">#datuur</div>
     <div class="event-name" id="eventName">Photobooth</div>
 
@@ -132,25 +164,41 @@
     }
 
     // ── Configuration ───────────────────────────────────────────────────────
-    // Primary: custom domain. Fallback: direct workers.dev URL (more reliable
-    // on some carrier networks that have trouble with custom Cloudflare domains).
     const RELAY_URLS = [
       'https://booth-relay.datuur.be',
-      'https://booth-relay.thomaes-koen.workers.dev', // fallback: direct workers.dev (bypasses carrier DNS issues)
+      'https://booth-relay.thomaes-koen.workers.dev', // fallback: direct workers.dev
     ];
 
     // ── Read event params from URL ──────────────────────────────────────────
     const params    = new URLSearchParams(window.location.search);
     const eventId   = params.get('event') || '';
     const eventName = params.get('name')  || 'Photobooth';
+    const decodedName = decodeURIComponent(eventName);
 
+    // ── No event in URL ─────────────────────────────────────────────────────
     if (!eventId) {
-      document.querySelector('.card').innerHTML =
+      document.getElementById('gdprCard').innerHTML =
         '<p style="color:#d56d6d;text-align:center;padding:20px;">Geen event geselecteerd.<br>Gebruik de link van de organisator.</p>';
     } else {
-      document.getElementById('eventName').textContent = decodeURIComponent(eventName);
-      document.title = `#datuur – ${decodeURIComponent(eventName)}`;
+      document.getElementById('gdprEventName').textContent = decodedName;
     }
+
+    // ── GDPR step ───────────────────────────────────────────────────────────
+    document.getElementById('gdprAccept')?.addEventListener('click', () => {
+      document.getElementById('gdprCard').style.display  = 'none';
+      document.getElementById('formCard').style.display  = '';
+      document.getElementById('eventName').textContent   = decodedName;
+      document.title = `#datuur – ${decodedName}`;
+    });
+
+    document.getElementById('gdprDecline')?.addEventListener('click', () => {
+      document.getElementById('gdprCard').innerHTML = `
+        <div class="brand">#datuur</div>
+        <p style="color:#aaa;text-align:center;padding:20px 0;font-size:0.95rem;line-height:1.6;">
+          Geen probleem. Je gegevens worden niet opgeslagen.<br><br>
+          Je kunt je alsnog ter plaatse registreren bij de photobooth.
+        </p>`;
+    });
 
     // ── Fetch helper — tries each URL in order, 15 s timeout per attempt ───
     async function postRegister(payload) {
@@ -174,13 +222,12 @@
           } catch {
             throw new Error(`HTTP ${response.status} – onverwacht antwoord`);
           }
-          return result; // success — stop trying further URLs
+          return result;
         } catch (err) {
           clearTimeout(timer);
           lastErr = err;
-          // Fall through to next URL only on network-level failures (no response received)
-          if (!response) continue;
-          throw err; // HTTP-level error — don't try other URLs
+          if (!response) continue; // network-level failure — try next URL
+          throw err;               // HTTP-level error — don't retry
         }
       }
       throw lastErr;
@@ -198,7 +245,7 @@
       const msg  = document.getElementById('msg');
 
       try {
-        const result = await postRegister({ ...data, eventId, eventName });
+        const result = await postRegister({ ...data, eventId, eventName: decodedName });
 
         if (result.ok) {
           msg.className   = 'msg-ok';
@@ -216,16 +263,13 @@
 
       } catch (err) {
         msg.className = 'msg-err';
-
         if (!navigator.onLine) {
           msg.textContent = '❌ Geen internetverbinding – controleer je netwerk';
         } else if (err.name === 'AbortError') {
           msg.textContent = '❌ Verbinding te traag – probeer opnieuw';
         } else {
-          // Show the real error so we can diagnose network-specific issues
           msg.textContent = '❌ ' + (err?.message || 'Verbindingsfout') + ' – probeer opnieuw';
         }
-
         msg.style.display = 'block';
         btn.textContent   = 'Registreer 📸';
         btn.disabled      = false;
