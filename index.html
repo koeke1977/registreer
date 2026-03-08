@@ -136,7 +136,7 @@
     // on some carrier networks that have trouble with custom Cloudflare domains).
     const RELAY_URLS = [
       'https://booth-relay.datuur.be',
-      // 'https://booth-relay.<account>.workers.dev',  // ← uncomment + fill in as fallback
+      'https://booth-relay.thomaes-koen.workers.dev', // fallback: direct workers.dev (bypasses carrier DNS issues)
     ];
 
     // ── Read event params from URL ──────────────────────────────────────────
