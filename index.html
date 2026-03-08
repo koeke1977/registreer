@@ -130,7 +130,8 @@
     if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
       location.replace('https:' + location.href.slice(5));
     }
-  </script>
+
+    // ── Configuration ───────────────────────────────────────────────────────
     // Update this URL to your deployed Cloudflare Worker before publishing.
     const RELAY_URL = 'https://booth-relay.datuur.be';
 
