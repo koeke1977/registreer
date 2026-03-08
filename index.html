@@ -132,8 +132,12 @@
     }
 
     // ── Configuration ───────────────────────────────────────────────────────
-    // Update this URL to your deployed Cloudflare Worker before publishing.
-    const RELAY_URL = 'https://booth-relay.datuur.be';
+    // Primary: custom domain. Fallback: direct workers.dev URL (more reliable
+    // on some carrier networks that have trouble with custom Cloudflare domains).
+    const RELAY_URLS = [
+      'https://booth-relay.datuur.be',
+      // 'https://booth-relay.<account>.workers.dev',  // ← uncomment + fill in as fallback
+    ];
 
     // ── Read event params from URL ──────────────────────────────────────────
     const params    = new URLSearchParams(window.location.search);
@@ -148,6 +152,40 @@
       document.title = `#datuur – ${decodeURIComponent(eventName)}`;
     }
 
+    // ── Fetch helper — tries each URL in order, 15 s timeout per attempt ───
+    async function postRegister(payload) {
+      let lastErr;
+      for (const baseUrl of RELAY_URLS) {
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        let response;
+        try {
+          response = await fetch(`${baseUrl}/api/register`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+            signal:  ctrl.signal,
+          });
+          clearTimeout(timer);
+
+          let result;
+          try {
+            result = await response.json();
+          } catch {
+            throw new Error(`HTTP ${response.status} – onverwacht antwoord`);
+          }
+          return result; // success — stop trying further URLs
+        } catch (err) {
+          clearTimeout(timer);
+          lastErr = err;
+          // Fall through to next URL only on network-level failures (no response received)
+          if (!response) continue;
+          throw err; // HTTP-level error — don't try other URLs
+        }
+      }
+      throw lastErr;
+    }
+
     // ── Form submission ─────────────────────────────────────────────────────
     document.getElementById('registrationForm').addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -157,22 +195,10 @@
       btn.textContent = '...';
 
       const data = Object.fromEntries(new FormData(this));
+      const msg  = document.getElementById('msg');
 
       try {
-        const response = await fetch(`${RELAY_URL}/api/register`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ...data, eventId, eventName }),
-        });
-
-        let result;
-        try {
-          result = await response.json();
-        } catch {
-          // Worker returned non-JSON (e.g. Cloudflare error page)
-          throw new Error(`HTTP ${response.status} – onverwacht antwoord`);
-        }
-        const msg    = document.getElementById('msg');
+        const result = await postRegister({ ...data, eventId, eventName });
 
         if (result.ok) {
           msg.className   = 'msg-ok';
@@ -186,15 +212,23 @@
           btn.textContent = 'Registreer 📸';
           btn.disabled    = false;
         }
+        msg.style.display = 'block';
+
+      } catch (err) {
+        msg.className = 'msg-err';
+
+        if (!navigator.onLine) {
+          msg.textContent = '❌ Geen internetverbinding – controleer je netwerk';
+        } else if (err.name === 'AbortError') {
+          msg.textContent = '❌ Verbinding te traag – probeer opnieuw';
+        } else {
+          // Show the real error so we can diagnose network-specific issues
+          msg.textContent = '❌ ' + (err?.message || 'Verbindingsfout') + ' – probeer opnieuw';
+        }
 
         msg.style.display = 'block';
-      } catch (err) {
-        const msg       = document.getElementById('msg');
-        msg.className   = 'msg-err';
-        msg.textContent = '❌ ' + (err?.message || 'Verbindingsfout') + ' – probeer opnieuw';
-        msg.style.display = 'block';
-        btn.textContent = 'Registreer 📸';
-        btn.disabled    = false;
+        btn.textContent   = 'Registreer 📸';
+        btn.disabled      = false;
       }
     });
   </script>
